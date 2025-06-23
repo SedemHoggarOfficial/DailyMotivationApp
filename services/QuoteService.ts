@@ -1,32 +1,33 @@
 import Quote from '../models/Quote';
+import { QuoteCache } from './QuoteCache';
+import fallbackQuotes from '../assets/quotes.json';
 
 export class QuoteService {
-  /**
-   * Fetches a random quote from the ZenQuotes API.
-   * @returns {Promise<Quote | null>} A Quote instance or null if fetching fails.
-   */
   static async fetchRandomQuote(): Promise<Quote | null> {
     const API_URL = 'https://zenquotes.io/api/random';
 
     try {
       const response = await fetch(API_URL);
-
-      if (!response.ok) {
-        console.error(`ZenQuotes API responded with status: ${response.status}`);
-        return null;
-      }
+      if (!response.ok) throw new Error(`Status: ${response.status}`);
 
       const data = await response.json();
-
       if (Array.isArray(data) && data.length > 0) {
-        return Quote.fromZenResponse(data[0]);
-      } else {
-        console.error('ZenQuotes API returned unexpected data format:', data);
+        const quote = Quote.fromZenResponse(data[0]);
+        await QuoteCache.save(quote);
+        return quote;
       }
-    } catch (error) {
-      console.error('Failed to fetch quote from ZenQuotes:', error);
+    } catch (err) {
+      console.warn('Fetching from API failed, using fallback.');
     }
 
-    return null;
+    return this.getCachedOrFallbackQuote();
+  }
+
+  static async getCachedOrFallbackQuote(): Promise<Quote> {
+    const cached = await QuoteCache.load();
+    if (cached) return cached;
+
+    const random = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
+    return Quote.fromZenResponse(random);
   }
 }
